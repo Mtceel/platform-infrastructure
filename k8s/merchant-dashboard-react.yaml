@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-dashboard
+  namespace: platform-services
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend-dashboard
+  template:
+    metadata:
+      labels:
+        app: frontend-dashboard
+    spec:
+      containers:
+      - name: frontend-dashboard
+        image: node:20-alpine
+        command: ["sh", "-c"]
+        args:
+          - |
+            cd /app && \
+            npm install express && \
+            node server.js
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: app-files
+          mountPath: /app
+      volumes:
+      - name: app-files
+        hostPath:
+          path: /home/saaspf/merchant-dashboard-react
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-dashboard
+  namespace: platform-services
+spec:
+  selector:
+    app: frontend-dashboard
+  ports:
+  - port: 3001
+    targetPort: 3000

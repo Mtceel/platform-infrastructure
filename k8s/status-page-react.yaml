@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-page
+  namespace: platform-services
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: status-page
+  template:
+    metadata:
+      labels:
+        app: status-page
+    spec:
+      containers:
+      - name: status-page
+        image: node:20-alpine
+        command: ["sh", "-c"]
+        args:
+          - |
+            cd /app && \
+            npm install express && \
+            node server.js
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: app-files
+          mountPath: /app
+      volumes:
+      - name: app-files
+        hostPath:
+          path: /home/saaspf/status-page-react
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: status-page
+  namespace: platform-services
+spec:
+  selector:
+    app: status-page
+  ports:
+  - port: 80
+    targetPort: 3000

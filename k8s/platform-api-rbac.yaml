@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-api
+  namespace: platform-services
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployment-reader
+  namespace: platform-services
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-api-deployment-reader
+  namespace: platform-services
+subjects:
+- kind: ServiceAccount
+  name: platform-api
+  namespace: platform-services
+roleRef:
+  kind: Role
+  name: deployment-reader
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-dashboard
+  namespace: platform-services
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: admin-dashboard
+  template:
+    metadata:
+      labels:
+        app: admin-dashboard
+    spec:
+      containers:
+      - name: admin-dashboard
+        image: node:20-alpine
+        command: ["sh", "-c", "cd /app && npm install express && node server.js"]
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: app-files
+          mountPath: /app
+        env:
+        - name: PORT
+          value: "3000"
+      volumes:
+      - name: app-files
+        hostPath:
+          path: /home/saaspf/admin-dashboard-react
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-dashboard
+  namespace: platform-services
+spec:
+  selector:
+    app: admin-dashboard
+  ports:
+  - port: 80
+    targetPort: 3000

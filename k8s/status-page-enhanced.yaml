@@ -1,0 +1,152 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: status-page-sa
+  namespace: platform-services
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: status-page-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "pods/exec"]
+  verbs: ["get", "list", "create"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: status-page-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: status-page-reader
+subjects:
+- kind: ServiceAccount
+  name: status-page-sa
+  namespace: platform-services
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: status-page-enhanced
+  namespace: platform-services
+data:
+  index.html: |
+    <!-- Content will be mounted from local file -->
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-page-enhanced
+  namespace: platform-services
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: status-page-enhanced
+  template:
+    metadata:
+      labels:
+        app: status-page-enhanced
+    spec:
+      serviceAccountName: status-page-sa
+      initContainers:
+      - name: install-kubectl
+        image: alpine:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apk add --no-cache curl
+            curl -LO "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            mv kubectl /kubectl-bin/
+        volumeMounts:
+        - name: kubectl-bin
+          mountPath: /kubectl-bin
+      containers:
+      - name: status-api
+        image: node:20-alpine
+        workingDir: /app-rw
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            cp /kubectl-bin/kubectl /usr/local/bin/
+            cp -r /app-ro/* /app-rw/
+            cd /app-rw
+            npm install express --no-save
+            node server.js
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: kubectl-bin
+          mountPath: /kubectl-bin
+        - name: app-code
+          mountPath: /app-ro
+          readOnly: true
+        - name: app-writable
+          mountPath: /app-rw
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        env:
+        - name: PORT
+          value: "3000"
+      volumes:
+      - name: kubectl-bin
+        emptyDir: {}
+      - name: app-code
+        hostPath:
+          path: /home/saaspf/status-page-enhanced
+          type: Directory
+      - name: app-writable
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: status-page-enhanced
+  namespace: platform-services
+spec:
+  selector:
+    app: status-page-enhanced
+  ports:
+  - port: 80
+    targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: status-page-enhanced
+  namespace: platform-services
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - status.fv-company.com
+    secretName: status-tls
+  rules:
+  - host: status.fv-company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: status-page-enhanced
+            port:
+              number: 80

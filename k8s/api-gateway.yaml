@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: platform-services
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - name: gateway
+        image: node:20-alpine
+        workingDir: /app
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            cp -r /app-ro/* /app/
+            npm install
+            node server.js
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: app-code
+          mountPath: /app-ro
+          readOnly: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        env:
+        - name: PORT
+          value: "3000"
+      volumes:
+      - name: app-code
+        hostPath:
+          path: /home/saaspf/api-gateway
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: platform-services
+spec:
+  selector:
+    app: api-gateway
+  ports:
+  - port: 80
+    targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+  namespace: platform-services
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.fv-company.com
+    secretName: api-gateway-tls
+  rules:
+  - host: api.fv-company.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 80

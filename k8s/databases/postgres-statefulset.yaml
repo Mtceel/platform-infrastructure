@@ -30,7 +30,10 @@ spec:
         - name: POSTGRES_USER
           value: postgres
         - name: POSTGRES_PASSWORD
-          value: postgres123  # TODO: Move to Sealed Secret
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: postgres-password
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
         volumeMounts:
